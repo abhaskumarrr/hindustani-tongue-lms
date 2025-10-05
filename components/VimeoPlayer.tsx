@@ -94,7 +94,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [quality, setQuality] = useState('auto');
-  const [showControls, setShowControls] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const [progress, setProgress] = useState<VideoProgress>({
     currentTime: 0,
     duration: 0,
@@ -106,7 +106,6 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   const [retryCount, setRetryCount] = useState(0);
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Build Vimeo iframe URL
   const getVimeoEmbedUrl = () => {
     const params = new URLSearchParams({
       autoplay: autoplay ? '1' : '0',
@@ -119,26 +118,21 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
       dnt: '1',
       quality: quality,
     });
-
     return `https://player.vimeo.com/video/${videoId}?${params.toString()}`;
   };
 
-  // Load Vimeo Player script
   const loadVimeoScript = (): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (window.Vimeo) {
         resolve();
         return;
       }
-
       const existingScript = document.querySelector('script[src="https://player.vimeo.com/api/player.js"]');
-      
       if (existingScript) {
         existingScript.addEventListener('load', () => resolve());
         existingScript.addEventListener('error', () => reject(new Error('Failed to load Vimeo SDK')));
         return;
       }
-
       const script = document.createElement('script');
       script.src = 'https://player.vimeo.com/api/player.js';
       script.async = true;
@@ -148,22 +142,14 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
     });
   };
 
-  // Mouse move handler
   const handleMouseMove = () => {
     setShowControls(true);
-    
-    if (hideControlsTimeoutRef.current) {
-      clearTimeout(hideControlsTimeoutRef.current);
-    }
-    
+    if (hideControlsTimeoutRef.current) clearTimeout(hideControlsTimeoutRef.current);
     hideControlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) {
-        setShowControls(false);
-      }
+      if (isPlaying) setShowControls(false);
     }, 3000);
   };
 
-  // Initialize player
   useEffect(() => {
     mountedRef.current = true;
     let loadTimeout: NodeJS.Timeout;
@@ -172,7 +158,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
       try {
         if (!iframeRef.current) return;
         if (!window.Vimeo) await loadVimeoScript();
-
+        
         playerRef.current = new window.Vimeo.Player(iframeRef.current);
 
         playerRef.current.ready().then(() => {
@@ -184,7 +170,6 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
             if (!mountedRef.current) return;
             setProgress(prev => ({ ...prev, duration }));
             onDurationUpdate?.(duration);
-
             if (initialProgress > 0) {
               const startTime = (initialProgress / 100) * duration;
               playerRef.current.setCurrentTime(startTime);
@@ -214,7 +199,6 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
 
         playerRef.current.on('timeupdate', (data: { seconds: number; duration: number }) => {
           if (!mountedRef.current) return;
-          
           const completionPercentage = data.duration > 0 ? (data.seconds / data.duration) * 100 : 0;
           const progressData: VideoProgress = {
             currentTime: data.seconds,
@@ -222,10 +206,8 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
             completionPercentage,
             watchedSeconds: data.seconds,
           };
-
           setProgress(progressData);
           onProgressUpdate?.(progressData);
-
           if (completionPercentage >= completionThreshold && !celebrationShownRef.current) {
             celebrationShownRef.current = true;
             setShowCelebration(true);
@@ -241,23 +223,16 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
 
         playerRef.current.on('error', (error: any) => {
           if (!mountedRef.current) return;
-          
           let errorMessage = 'Video playback error. ';
-          if (error.name === 'PrivacyError') {
-            errorMessage += 'This video is private or has domain restrictions.';
-          } else if (error.name === 'PasswordError') {
-            errorMessage += 'This video requires a password.';
-          } else if (error.message) {
-            errorMessage += error.message;
-          }
-          
+          if (error.name === 'PrivacyError') errorMessage += 'This video is private or has domain restrictions.';
+          else if (error.name === 'PasswordError') errorMessage += 'This video requires a password.';
+          else if (error.message) errorMessage += error.message;
           setError(new Error(errorMessage));
           setIsLoading(false);
           onError?.(error);
         });
 
         clearTimeout(loadTimeout);
-
       } catch (err: any) {
         if (mountedRef.current) {
           setError(err);
@@ -289,7 +264,6 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
     };
   }, [videoId, retryCount]);
 
-  // Fullscreen handling
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -305,15 +279,17 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   };
 
   const togglePlay = async () => {
-    if (!playerRef.current) return;
+    if (!playerRef.current || !isReady) return;
     try {
       if (isPlaying) await playerRef.current.pause();
       else await playerRef.current.play();
-    } catch (err) {}
+    } catch (err) {
+      console.error('Error toggling play:', err);
+    }
   };
 
   const handleVolumeChange = async (value: number[]) => {
-    if (!playerRef.current) return;
+    if (!playerRef.current || !isReady) return;
     const newVolume = value[0];
     setVolume(newVolume);
     try {
@@ -322,7 +298,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   };
 
   const toggleMute = async () => {
-    if (!playerRef.current) return;
+    if (!playerRef.current || !isReady) return;
     try {
       if (isMuted) await playerRef.current.setVolume(volume / 100);
       else await playerRef.current.setVolume(0);
@@ -330,7 +306,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   };
 
   const handleSeek = async (value: number[]) => {
-    if (!playerRef.current || progress.duration === 0) return;
+    if (!playerRef.current || !isReady || progress.duration === 0) return;
     const seekTime = (value[0] / 100) * progress.duration;
     try {
       await playerRef.current.setCurrentTime(seekTime);
@@ -338,7 +314,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   };
 
   const skip = async (seconds: number) => {
-    if (!playerRef.current) return;
+    if (!playerRef.current || !isReady) return;
     try {
       const currentTime = await playerRef.current.getCurrentTime();
       await playerRef.current.setCurrentTime(currentTime + seconds);
@@ -346,7 +322,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
   };
 
   const changePlaybackRate = async (rate: number) => {
-    if (!playerRef.current) return;
+    if (!playerRef.current || !isReady) return;
     setPlaybackRate(rate);
     try {
       await playerRef.current.setPlaybackRate(rate);
@@ -365,7 +341,6 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
-    
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
@@ -380,7 +355,6 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
     return <Volume2 className="w-4 h-4" />;
   };
 
-  // Error display
   if (error) {
     return (
       <Card className={`overflow-hidden ${className}`}>
@@ -395,11 +369,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Retry
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => window.open(`https://vimeo.com/${videoId}`, '_blank')}
-                >
+                <Button size="sm" variant="outline" onClick={() => window.open(`https://vimeo.com/${videoId}`, '_blank')}>
                   Open on Vimeo
                 </Button>
               </div>
@@ -453,100 +423,52 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
 
         {/* Controls */}
         {isReady && (
-          <div 
-            className={`absolute inset-0 transition-opacity duration-300 pointer-events-none ${
-              showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/80 via-black/40 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/90 via-black/60 to-transparent" />
+          <div className={`absolute inset-0 transition-opacity duration-300 z-20 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/90 via-black/60 to-transparent pointer-events-none" />
 
             {/* Center play */}
             {!isPlaying && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  onClick={togglePlay}
-                  className="pointer-events-auto w-20 h-20 rounded-full bg-gradient-to-br from-primary via-primary to-secondary flex items-center justify-center shadow-2xl hover:scale-110 transition-all duration-200 border-4 border-white/20 hover:border-white/40"
-                >
+                <button onClick={togglePlay} className="w-20 h-20 rounded-full bg-gradient-to-br from-primary via-primary to-secondary flex items-center justify-center shadow-2xl hover:scale-110 transition-all duration-200 border-4 border-white/20 hover:border-white/40 cursor-pointer z-30">
                   <Play className="w-8 h-8 text-white ml-1" fill="white" />
                 </button>
               </div>
             )}
 
             {/* Progress bar */}
-            <div className="absolute bottom-20 left-0 right-0 px-6 pointer-events-auto">
+            <div className="absolute bottom-20 left-0 right-0 px-6 z-30">
               <div className="mb-2 flex items-center justify-between text-xs text-white/90 font-medium">
                 <span className="bg-black/60 px-2 py-1 rounded backdrop-blur-sm">{formatTime(progress.currentTime)}</span>
                 <span className="bg-black/60 px-2 py-1 rounded backdrop-blur-sm">{formatTime(progress.duration)}</span>
               </div>
-              
               <div className="relative group/slider">
-                {/* Threshold marker */}
-                <div 
-                  className="absolute -top-6 flex flex-col items-center"
-                  style={{ left: `${completionThreshold}%`, transform: 'translateX(-50%)' }}
-                >
+                <div className="absolute -top-6 flex flex-col items-center pointer-events-none" style={{ left: `${completionThreshold}%`, transform: 'translateX(-50%)' }}>
                   <Zap className="w-3 h-3 text-secondary animate-pulse" fill="currentColor" />
                   <div className="text-[10px] font-bold text-secondary">{completionThreshold}%</div>
                 </div>
-                
-                <Slider
-                  value={[progress.duration > 0 ? (progress.currentTime / progress.duration) * 100 : 0]}
-                  onValueChange={handleSeek}
-                  max={100}
-                  step={0.1}
-                  className="cursor-pointer [&_[role=slider]]:bg-gradient-to-r [&_[role=slider]]:from-primary [&_[role=slider]]:to-secondary [&_[role=slider]]:border-2 [&_[role=slider]]:border-white [&_[role=slider]]:h-4 [&_[role=slider]]:w-4 [&_[role=slider]]:shadow-lg"
-                />
+                <Slider value={[progress.duration > 0 ? (progress.currentTime / progress.duration) * 100 : 0]} onValueChange={handleSeek} max={100} step={0.1} className="cursor-pointer [&_[role=slider]]:bg-gradient-to-r [&_[role=slider]]:from-primary [&_[role=slider]]:to-secondary [&_[role=slider]]:border-2 [&_[role=slider]]:border-white [&_[role=slider]]:h-4 [&_[role=slider]]:w-4 [&_[role=slider]]:shadow-lg" />
               </div>
             </div>
 
             {/* Control buttons */}
-            <div className="absolute bottom-4 left-0 right-0 px-6 flex items-center justify-between pointer-events-auto">
+            <div className="absolute bottom-4 left-0 right-0 px-6 flex items-center justify-between z-30">
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={togglePlay}
-                  className="text-white hover:bg-white/20 h-10 w-10 p-0 rounded-full bg-black/50 backdrop-blur-sm border border-white/30 hover:border-primary"
-                >
+                <Button variant="ghost" size="sm" onClick={togglePlay} className="text-white hover:bg-white/20 h-10 w-10 p-0 rounded-full bg-black/50 backdrop-blur-sm border border-white/30 hover:border-primary cursor-pointer">
                   {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                 </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => skip(-10)}
-                  className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20"
-                >
+                <Button variant="ghost" size="sm" onClick={() => skip(-10)} className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 cursor-pointer">
                   <SkipBack className="w-4 h-4" />
                 </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => skip(10)}
-                  className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20"
-                >
+                <Button variant="ghost" size="sm" onClick={() => skip(10)} className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 cursor-pointer">
                   <SkipForward className="w-4 h-4" />
                 </Button>
-
                 <div className="flex items-center gap-2 ml-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleMute}
-                    className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20"
-                  >
+                  <Button variant="ghost" size="sm" onClick={toggleMute} className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 cursor-pointer">
                     {getVolumeIcon()}
                   </Button>
                   <div className="w-20 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Slider
-                      value={[isMuted ? 0 : volume]}
-                      onValueChange={handleVolumeChange}
-                      max={100}
-                      step={1}
-                      className="[&_[role=slider]]:bg-white [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-                    />
+                    <Slider value={[isMuted ? 0 : volume]} onValueChange={handleVolumeChange} max={100} step={1} className="[&_[role=slider]]:bg-white [&_[role=slider]]:h-3 [&_[role=slider]]:w-3" />
                   </div>
                 </div>
               </div>
@@ -559,11 +481,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-white hover:bg-white/20 h-9 px-3 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 font-medium text-xs"
-                    >
+                    <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 h-9 px-3 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 font-medium text-xs cursor-pointer">
                       {playbackRate}x
                     </Button>
                   </DropdownMenuTrigger>
@@ -571,13 +489,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
                     <DropdownMenuLabel className="text-white/70 text-xs">Speed</DropdownMenuLabel>
                     <DropdownMenuSeparator className="bg-white/10" />
                     {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
-                      <DropdownMenuItem
-                        key={rate}
-                        onClick={() => changePlaybackRate(rate)}
-                        className={`text-white hover:bg-primary/20 cursor-pointer ${
-                          playbackRate === rate ? 'bg-primary/30 text-primary font-medium' : ''
-                        }`}
-                      >
+                      <DropdownMenuItem key={rate} onClick={() => changePlaybackRate(rate)} className={`text-white hover:bg-primary/20 cursor-pointer ${playbackRate === rate ? 'bg-primary/30 text-primary font-medium' : ''}`}>
                         {rate === 1 ? 'Normal' : `${rate}x`}
                       </DropdownMenuItem>
                     ))}
@@ -586,11 +498,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20"
-                    >
+                    <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 cursor-pointer">
                       <Settings className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -598,25 +506,14 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
                     <DropdownMenuLabel className="text-white/70 text-xs">Quality</DropdownMenuLabel>
                     <DropdownMenuSeparator className="bg-white/10" />
                     {['auto', '1080p', '720p', '540p', '360p'].map((q) => (
-                      <DropdownMenuItem
-                        key={q}
-                        onClick={() => setQuality(q)}
-                        className={`text-white hover:bg-primary/20 cursor-pointer ${
-                          quality === q ? 'bg-primary/30 text-primary font-medium' : ''
-                        }`}
-                      >
+                      <DropdownMenuItem key={q} onClick={() => setQuality(q)} className={`text-white hover:bg-primary/20 cursor-pointer ${quality === q ? 'bg-primary/30 text-primary font-medium' : ''}`}>
                         {q === 'auto' ? 'Auto' : q}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleFullscreen}
-                  className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20"
-                >
+                <Button variant="ghost" size="sm" onClick={toggleFullscreen} className="text-white hover:bg-white/20 h-9 w-9 p-0 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 cursor-pointer">
                   {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
                 </Button>
               </div>
@@ -626,7 +523,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
 
         {/* Celebration */}
         {showCelebration && (
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/40 via-black/90 to-secondary/40 backdrop-blur-md flex items-center justify-center z-40 animate-in fade-in duration-500">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/40 via-black/90 to-secondary/40 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-500">
             <Card className="p-8 text-center max-w-sm mx-4 border-2 border-primary shadow-2xl bg-gradient-to-br from-card via-card to-secondary/10">
               <div className="relative w-20 h-20 mx-auto mb-4">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded-full animate-pulse" />
@@ -641,12 +538,8 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
                 You've completed {completionThreshold}% of this lesson. The next lesson is now unlocked!
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={closeCelebration} className="flex-1">
-                  Continue
-                </Button>
-                <ContinueLearningButton courseId={courseId} className="flex-1">
-                  Next Lesson
-                </ContinueLearningButton>
+                <Button variant="outline" onClick={closeCelebration} className="flex-1">Continue</Button>
+                <ContinueLearningButton courseId={courseId} className="flex-1">Next Lesson</ContinueLearningButton>
               </div>
             </Card>
           </div>
@@ -658,9 +551,7 @@ export const VimeoPlayer: React.FC<VimeoPlayerProps> = ({
         <div className="p-4 bg-gradient-to-r from-primary/5 to-secondary/5">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-muted-foreground font-medium">Watch Progress</span>
-            <span className="text-foreground font-semibold">
-              {Math.round(progress.completionPercentage)}% complete
-            </span>
+            <span className="text-foreground font-semibold">{Math.round(progress.completionPercentage)}% complete</span>
           </div>
           <Progress value={progress.completionPercentage} className="h-2" />
           <div className="flex justify-between text-xs text-muted-foreground mt-2">
