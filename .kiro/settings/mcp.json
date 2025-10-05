@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "fetch-tools": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "fetch"
+      ],
+      "disabledTools": []
+    },
+    "firebase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "firebase-tools@latest",
+        "experimental:mcp"
+      ],
+      "disabled": false,
+      "disabledTools": [],
+      "autoApprove": [
+        "firebase_list_projects"
+      ]
+    },
+    "git": {
+      "command": "git",
+      "args": [],
+      "disabled": false,
+      "disabledTools": []
+    },
+    "testing": {
+      "command": "npx",
+      "args": [
+        "vitest"
+      ],
+      "disabled": false,
+      "disabledTools": []
+    },
+    "linting": {
+      "command": "npm",
+      "args": [
+        "run",
+        "lint"
+      ],
+      "disabled": false,
+      "disabledTools": []
+    }
+  }
+}

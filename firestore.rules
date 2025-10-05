@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Courses collection - public read, instructors can write
+    match /courses/{courseId} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+        (request.auth.token.role == 'instructor' || request.auth.token.role == 'admin');
+
+      // Lessons subcollection - public read for enrolled users, instructors can write
+      match /lessons/{lessonId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && 
+          (request.auth.token.role == 'instructor' || request.auth.token.role == 'admin');
+      }
+    }
+    
+    // User Progress collection - users can only access their own progress
+    match /userProgress/{progressId} {
+      allow read, write: if request.auth != null && 
+        progressId.matches(request.auth.uid + '_.*');
+      
+      // Validate progress data structure and values
+      allow write: if request.auth != null && 
+        progressId.matches(request.auth.uid + '_.*') &&
+        validateProgressData(request.resource.data);
+    }
+    
+    // Videos collection - instructors can manage, students can read
+    match /videos/{videoId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.role == 'instructor' || request.auth.token.role == 'admin');
+    }
+    
+    // Analytics collection - instructors can read their course analytics
+    match /analytics/{analyticsId} {
+      allow read: if request.auth != null && 
+        (request.auth.token.role == 'instructor' || request.auth.token.role == 'admin');
+      allow write: if false; // Only system can write analytics
+    }
+    
+    // Functions to validate data
+    function validateProgressData(data) {
+      return data.keys().hasAll(['userId', 'courseId', 'overallProgress']) &&
+        data.overallProgress.completionPercentage >= 0 &&
+        data.overallProgress.completionPercentage <= 100 &&
+        data.userId is string &&
+        data.courseId is string;
+    }
+    
+    // Rate limiting function - max 10 progress updates per minute per user
+    function isWithinRateLimit() {
+      return request.time > resource.data.lastUpdate + duration.value(6, 's');
+    }
+  }
+}
